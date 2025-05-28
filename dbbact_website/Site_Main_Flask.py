@@ -3489,6 +3489,7 @@ def interactive_heatmap_submit():
 
 @Site_Main_Flask_Obj.route('/get_sequences_stats', methods=['POST', 'GET'])
 def get_sequences_stats():
+    # TODO: Add taxonomy information (both list of exact matches and the RDP predicted taxonomy)
     alldat = request.get_json()
     if 'sequences' not in alldat:
         return 'Error: no sequences field provided in json'
@@ -3538,7 +3539,34 @@ def get_sequences_stats():
         clink = 'https://dbbact.org/annotation_info/%s' % cid
         cdat = {'text': ctext, 'experiment': cexp, 'description': cdesc, 'link': clink}
         desc.append(cdat)
-    res = {'fscores': fscores, 'annotations': desc}
+
+    # get the rdp taxonomy for the sequences
+    taxonomies = []
+    for cseq in seqs:
+        rdata = {}
+        rdata['sequence'] = cseq
+        taxStr = "na"
+        httpResTax = requests.get(dbbact_server_address + '/sequences/get_taxonomy_str', json=rdata)
+        if httpResTax.status_code == requests.codes.ok:
+            taxStr = httpResTax.json().get('taxonomy')
+        else:
+            debug(6, 'Error getting taxonomy for sequence %s: %s' % (cseq, httpResTax.content))
+        taxonomies.append(taxStr)
+
+    # Get the species and taxonomies based on 100% matching to the whole sequence database (i.e. silva)
+    species = []
+    for cseq in seqs:
+        seq_species = []
+        rdata = {}
+        rdata['sequence'] = cseq
+        httpResTax = requests.get(dbbact_server_address + '/sequences/get_whole_seq_taxonomy', json=rdata)
+        if httpResTax.status_code == requests.codes.ok:
+            seq_species = httpResTax.json().get('species')
+        else:
+            debug(6, 'Error getting whole sequence taxonomy for sequence %s: %s' % (cseq, httpResTax.content))
+        species.append(seq_species)
+
+    res = {'fscores': fscores, 'annotations': desc, 'rdp_taxonomy': taxonomies, 'matched_taxonomy': species}
     return res
 
 @Site_Main_Flask_Obj.route('/sequences_fscores', methods=['POST', 'GET'])
